@@ -1,0 +1,219 @@
+
+
+/* OS/2 Developer Magazine, Issue : Spring 93, page : 94-102 */
+/* Article title : Method Resolution in SOM                  */
+/* Authors : Roger Sessions and Nurcan Coskun                */
+
+/* student.csc file: */
+include <somobj.sc>
+
+class:
+  Student;
+
+parent:
+  SOMObject;
+
+data:
+  char  idÕ16þ;      /* student id */
+  char  nameÕ32þ;    /* student name */
+
+methods:
+  override  somInit;
+
+  void  setUpStudent(char *id, char *name), name lookup;
+  -- sets up a new student.
+
+  void  resetStudentId(char *id);
+  -- resets student id.
+
+  void  resetStudentName(char *name);
+  -- resets student name.
+
+  void  printStudentInfo();
+  -- prints the student information.
+
+  char  *getStudentType();
+  -- returns the student type.
+
+  char  *getStudentId();
+  -- returns the student id.
+
+--------------------------------------------------------------------------
+/* student.c file: */
+
+#define Student_Class_Source
+#define SOM_NoTest
+#include "student.ih"
+
+SOM_Scope void   SOMLINK somInit(Student *somSelf)
+{
+    StudentData *somThis = StudentGetData(somSelf);
+    parent_somInit(somSelf);
+    _idÕ0þ = _nameÕ0þ = '\0';
+}
+
+SOM_Scope void   SOMLINK setUpStudent(Student *somSelf,
+		char *id, char *name)
+{
+    StudentData *somThis = StudentGetData(somSelf);
+    strcpy(_id, id);
+    strcpy(_name, name);
+}
+
+SOM_Scope void   SOMLINK printStudentInfo(Student *somSelf)
+{
+    StudentData *somThis = StudentGetData(somSelf);
+    printf("\n    Id         : %s \n", _id);
+    printf("    Name       : %s \n", _name);
+    printf("    Type       : %s \n", _getStudentType(somSelf));
+}
+
+SOM_Scope char *  SOMLINK getStudentType(Student *somSelf)
+{
+    StudentData *somThis = StudentGetData(somSelf);
+    static char *type = "student";
+    return (type);
+}
+
+SOM_Scope char *  SOMLINK getStudentId(Student *somSelf)
+{
+    StudentData *somThis = StudentGetData(somSelf);
+    return (_id);
+}
+
+SOM_Scope void   SOMLINK resetStudentId(Student *somSelf,
+		char *id)
+{
+    StudentData *somThis = StudentGetData(somSelf);
+    StudentMethodDebug("Student","resetStudentId");
+    strcpy(_id, id);
+}
+
+SOM_Scope void   SOMLINK resetStudentName(Student *somSelf,
+		char *name)
+{
+    StudentData *somThis = StudentGetData(somSelf);
+    StudentMethodDebug("Student","resetStudentName");
+    strcpy(_name, name);
+}
+--------------------------------------------------------------------------
+/* stdinter.c file: */
+/* Student class interpreter code */
+
+#include "student.h"
+#include <stdio.h>
+#define MAX_LENGTH 80
+
+static void getLine(s, msg) /* get line into s */
+char sÕþ;
+char *msg;
+{
+  int i,c;
+  printf(msg);
+  for (i=0; i<(MAX_LENGTH-1) && (c=getchar()) != EOF && c!= '\n'; ++i)
+    sÕiþ = c;
+  sÕiþ = '\0';
+}
+
+main()
+{
+   int i, argNo;
+   char *str, *arg;
+   char *argList = NULL;
+   char lineÕMAX_LENGTHþ;
+   char methodÕMAX_LENGTHþ;
+   char msgÕMAX_LENGTHþ;
+   Student *student = StudentNew();
+
+   /* display the menu options and read the operation */
+     getLine(line, "\n> Menu Options are : 'm(message)' , 'q(quit)'\n$");
+     while(lineÕ0þ == 'm'){
+       /* query the message name */
+         getLine(method, "> Enter method name:\n$");
+       /* query the number of arguments */
+         getLine(line, "> Enter the number of arguments:\n$");
+         argNo = atoi(line);
+       /* query the arguments */
+         argList = (char *) malloc((sizeof (char *)) * argNo);
+         for(i=0; i < argNo; ++i){
+           sprintf(msg, "> Enter the argumentÕ%dþ:\n$", i);
+           arg = (char *) malloc(MAX_LENGTH);
+           getLine(arg, msg);
+           *(char **)(argList + (i * sizeof(char *))) = arg;
+         }
+       /* query the return type */
+         getLine(line, "> Enter the return type:\n$");
+       /* send the message to student object */
+         if(lineÕ0þ == 's'){
+           str = (char *) SOMObject_somDispatchA(student,
+                          somIdFromString(method), "", argList);
+           printf("==> Return string from <%s> method is : <%s>.\n",
+                                                        method, str);
+         }
+         else{
+           SOMObject_somDispatchV(student, somIdFromString(method),
+                                                      "", argList);
+         }
+       /* free the argList */
+         for(i=0; i < argNo; ++i){
+           arg = *(char **)(argList + (i * sizeof(char *)));
+           free(arg);
+         }
+         free(argList);
+         argList = NULL;
+       /* query the next operation */
+         getLine(line, "\n> Menu Options are : 'm(message)' , 'q(quit)'\n$");
+   }
+   _somFree(student);
+}
+--------------------------------------------------------------------------
+/* main.c file: */
+/* Demonstration of name lookup resolution */
+
+#include "student.h"
+
+typedef void (*methodType1) (SOMObject *, char *, char *);
+typedef char * (*methodType2) (SOMObject *);
+
+/* The following functions can be used to invoke methods
+   with a fixed signature */
+
+sendMessage1(char *method, SOMObject *target, char *str1, char *str2)
+{
+    somMethodProc *methodPtr;
+    _somFindMethod(_somGetClass(target), somIdFromString(method),
+                       &methodPtr);
+    ((methodType1)methodPtr)(target,str1, str2);
+}
+
+char *sendMessage2(char *method, SOMObject *target)
+{
+    somMethodProc *methodPtr;
+    _somFindMethod(_somGetClass(target), somIdFromString(method),
+                       &methodPtr);
+    return(((methodType2)methodPtr)(target));
+}
+
+main()
+{
+   Student *student1 = StudentNew();
+   Student *student2 = StudentNew();
+   char *id, *type;
+
+   /* Offset resolution */
+   _setUpStudent(student1, "599600", "David Brown");
+   _printStudentInfo(student1);
+
+   /* Name lookup resolution */
+   sendMessage1("setUpStudent", student2, "120045", "Janet Smith");
+   _printStudentInfo(student2);
+
+   id = sendMessage2("getStudentId", student2);
+   printf("Student Id = %s \n", id);
+
+   type = sendMessage2("getStudentType", student2);
+   printf("Student Type = %s \n", type);
+}
+--------------------------------------------------------------------------
+
+
